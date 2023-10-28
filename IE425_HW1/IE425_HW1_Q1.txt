@@ -1,0 +1,164 @@
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(partykit)
+
+#Load the dataset.
+data("spam", package = "kernlab")
+#Let's look at to the first 3 rows of the data to overview and obtain some insights.
+#For example, the last column of the dataset is the value what we are going to predict.
+head(spam,3)
+#The dimension of the data is also important t? check there is any missing colmuns or rows.
+#The shape of the data is (4601,58). There are 57 features that describe the type of the e-mail.
+dim(spam)
+#Describe the dataset in terms of the type of the data(factor or numerical) and the values.
+str(spam)
+#L?t's look whether the rows contain any null values or not.
+#If there are some null values, we should fill them by using some methods to use the row in the prediction.
+colSums(is.na(spam))
+#The name of the columns is also important to understand the problem ?nd internalize it.
+colnames(spam)
+
+
+#QUESTION 1
+
+#Seeding the set with value of 425.
+set.seed(425)
+
+#Train-test-split by using index numbers.
+inds <- createDataPartition(spam$type, p = 0.8, list=FALSE)
+#Train set is 0.8 whereas the test set is 0.2
+train <-spam[inds, ]
+test <- spam[-inds, ]
+
+
+#Checking whether the dataset is being splitted with the rates of 0.8 and 0.2
+#The rate of number of observations of train and test datasets should be 4.
+nrow(train)
+nrow(test)
+nrow(train)/nrow(test)
+#According to the c?lculation, the rate is 4.
+
+#The number of nonspam and spam emails in the datasets.
+table(train$type)
+table(test$type)
+#Now, let's see the distribution of spam and nonspam emails in the datasets.
+prop.table(table(train$type))
+prop.table(table(test$type))
+#As can be seen, the proportion of classes remains the same in both sets.
+
+
+#QUESTION 2
+
+#Using rpart and the tarining dataset, the largest possible tree is being determined by setting the
+#minsplit and minbucket to zero.
+#Minsplit is the minimum number of ob?ervations in the node to continue the splitting the node further.
+#Minbucket is the minimum number of observations required at the leaf node.
+#Also, the cp value is quite important in creating a large tree.
+#The cp value controls the size of the decision t?ee. If cost of adding a new node is bigger than
+#cp value, then the node is being added.
+theLargestTree <- rpart(type~.,method="class",data=train, minsplit=0,minbucket=0, cp=0)
+#Plot the tree by specifying the shape and color.
+rpart.plot(theLargestTree, type = 3, box.palette = "auto", extra = 1)
+
+
+#QUESTION 3
+
+#Predict by using test data set.
+pred = predict(theLargestTree,newdata=test,type="class")
+#Quick review of the predictions.
+head(pred)
+#The predicted proportion of the classes.
+table(test$type, pred)
+#Convert the categorical string values to binary vectors.
+#1 should be extracted because the categorical values are being converted as 1 and 2.
+test$type_numeric = as.numeric(test$type)-1
+pred_numeric = as.numeric(pred)-1
+#Checking whether the categorical string values are converted or not into to vectors.
+table(test$type_numeric, pred_numeric)
+
+#Import the neceassary library called Metrics to evaluate the performance of the predictor.
+library(Metrics)
+#accuracy = (tp+tn)/(tp+tn+fp+fn)
+accuracy(actual=test$type, predicted=pred)
+#precision = (tp)/(tp+fp)
+precision(actual=test$type_numeric,predicted=pred_numeric)
+#recall = (tp)/(tp+fn)
+recall(actual =test$type_numeric, predicted=pred_numeric)
+#false negative = (fn)/(tp+fn)
+false_negative = 1-recall(actual =test$type_numeric, predicted=pred_numeric)
+false_negative
+#false positive = (fp)/(tp+fp)
+false_positive = 1-precision(actual=test$type_numeric,predicted=pred_numeric)
+false_positive
+#error = (fp+fn)/(tp+tn+fp+fn)
+error_rate = 1-accuracy(actual=test$type, predicted=pred)
+error_rate
+
+#QUESTION 4
+
+#First of all, print the cp table and see how the error decreases at first and incerases.
+print(theLargestTree$cptable)
+#Find the optimum index. After that point the cross valiadtion error is increasing in the test set while it is still decreasing in the train set.
+#To prevent from overfitting, he tree should stop at this index point.
+opt_index = which.min(theLargestTree$cptable[, "xerror"])
+opt_index
+cp_opt=theLargestTree$cptable[opt_index, "CP"]
+#Prune the tree by using the minimum cross validation error.
+tree_opt=prune.rpart(tree = theLargestTree,cp = cp_opt)
+rpart.plot(tree_opt, type = 3, box.palette = "auto", extra = 1)
+
+
+#Now, it is time to compute other error value and new index as it is requested in the question.
+
+#The standard deviation of the error at the optimal index point.
+print(theLargestTree$cptable[opt_index, "xstd"])
+#The minimum value of the error.
+print(min(theLargestTree$cptable[, "xerror"]))
+#The sum of the smallest cv error + one standard deviation. 
+cv_error=min(theLargestTree$cptable[, "xerror"])+theLargestTree$cptable[opt_index, "xstd"]
+cv_error
+#Find the index where the cv error is smaller than cv_error.
+opttree_index= which.max(theLargestTree$cptable[, "xerror"]<=cv_error)
+opttree_index
+#New cp optimum value:
+cp_opt_new=theLargestTree$cptable[opttree_index, "CP"]
+
+#Prune the tree by using new cp value.
+opttree=prune.rpart(theLargestTree,cp=cp_opt_new)
+rpart.plot(opttree, type = 3, box.palette = "auto", extra = 1)
+
+
+#QUESTION 5
+
+
+#Predict by using test data set.
+pred_opttree=predict(opttree,newdata=test,type="class")
+#Quick review of the predictions.
+head(pred_opttree)
+#The predicted proportion of the classes.
+table(test$type, pred_opttree)
+#Convert the categorical string values to binary vectors.
+#1 should be extracted because the categorical values are being converted as 1 and 2.
+test$type_numeric = as.numeric(test$type)-1
+pred_opttree_numeric = as.numeric(pred_opttree)-1
+#Checking whether the categorical string values are converted or not into to vectors.
+table(test$type_numeric, pred_opttree_numeric)
+
+#Import the neceassary library called Metrics to evaluate the performance of the predictor.
+library(Metrics)
+#accuracy = (tp+tn)/(tp+tn+fp+fn)
+accuracy(actual=test$type, predicted=pred_opttree)
+#precision = (tp)/(tp+fp)
+precision(actual=test$type_numeric,predicted=pred_opttree_numeric)
+#recall = (tp)/(tp+fn)
+recall(actual =test$type_numeric, predicted=pred_opttree_numeric)
+#false negative = (fn)/(tp+fn)
+false_negative = 1-recall(actual =test$type_numeric, predicted=pred_opttree_numeric)
+false_negative
+#false positive = (fp)/(tp+fp)
+false_positive = 1-precision(actual=test$type_numeric,predicted=pred_opttree_numeric)
+false_positive
+#error = (fp+fn)/(tp+tn+fp+fn)
+error_rate = 1-accuracy(actual=test$type, predicted=pred_opttree)
+error_rate

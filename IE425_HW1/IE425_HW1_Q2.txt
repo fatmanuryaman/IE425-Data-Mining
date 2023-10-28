@@ -1,0 +1,99 @@
+library(rpart)
+library(rpart.plot)
+library(caret)
+
+#Load the dataset.
+data = read.csv("C:/Users/fatma/Desktop/IE425_HW1_FATMANUR_YAMAN/ToyotaCorolla.csv")
+#Let's look at to the first 3 rows of the data to overview and obtain some insights.
+#For example, the last column of the dataset is the value what we are going to predict.
+head(data,3)
+#The dimension of the data is also important to check there is any missing colmuns or rows.
+#The shape of the data is (4601,58). There are 57 features that describe the type of the e-mail.
+dim(data)
+#Describe the dataset in terms of the type of the data(factor or numerical) and the values.
+str(data)
+#Let's look whether the rows contain any null values or not.
+#If there are some null values, we should fill them by using some methods to use the row in the prediction.
+colSums(is.na(data))
+#The name of the columns is also important to understand the problem and internalize it.
+colnames(data)
+
+#QUESTION 1
+
+#Seeding the set with value of 425.
+set.seed(582)
+
+#Train-test-split by using index numbers.
+inds <- createDataPartition(data$Price, p = 0.75, list=FALSE)
+#Train set is 0.8 whereas the test set is 0.2
+train <-data[inds, ]
+test <- data[-inds, ]
+
+
+#Checking whether the dataset is being splitted with the rates of 0.8 and 0.2
+#The rate of number of observations of train and test datasets should be 4.
+nrow(train)
+nrow(test)
+nrow(train)/nrow(test)
+#According to the calculation, the rate is 3. (0.75/0.25)
+
+#QUESTION 2
+
+largestTree=rpart(Price~., data=train, minsplit=2, minbucket=1,cp=0)
+opt_index_2=which.min(largestTree$cptable[, "xerror"])
+opt_index_2
+cp_opt_2=largestTree$cptable[opt_index_2, "CP"]
+tree_opt_2=prune.rpart(tree=largestTree, cp=cp_opt_2)
+rpart.plot(tree_opt_2, type = 3, box.palette = "auto", extra = 1)
+summary(tree_opt_2)
+
+
+#QUESTION 3
+
+pred_2=predict(tree_opt_2, newdata=test)
+head(pred_2)
+test_price=test[,"Price"]
+plot(pred_2, test_price)
+abline(0,1)
+
+
+library(Metrics)
+rmse(actual = test_price,predicted = pred_2)
+mae(actual = test_price,predicted = pred_2)
+mape(actual = test_price,predicted = pred_2)
+
+
+#QUESTION 4
+
+install.packages("randomForest")
+library(randomForest)
+
+
+mtry_tuning=seq(1,6,1)
+ntree_tuning=seq(50,400,50)
+nodesize_tuning=seq(15,150,10)
+
+best_rmse=Inf
+best_parameters= list()
+for (i in mtry_tuning){
+  for (j in ntree_tuning){
+    for (k in nodesize_tuning){
+      rf.parameters=randomForest(Price~., data=train,
+                                  mtry=i, ntree=j, nodesize=k)
+      predicted_tree=predict(rf.parameters, newdata=test)
+      rmse_tree=rmse(actual=test_price, predicted=predicted_tree)
+      if (rmse_tree<=best_rmse){
+        best_rmse=rmse_tree
+        new_parameters=append(best_parameters,c(i,j,k),)
+      }
+    }
+  }
+}
+
+best_parameters_int=as.integer(new_parameters)
+
+rf_toyota=randomForest(Price~., data=train,mtry=best_parameters_int[1], ntree=best_parameters_int[2], nodesize=best_parameters_int[3])
+rf_toyota_predict=predict(rf_toyota, newdata=test)
+rmse(actual = test_price,predicted = rf_toyota_predict)
+mae(actual = test_price,predicted = rf_toyota_predict)
+mape(actual = test_price,predicted = rf_toyota_predict)
